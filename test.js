@@ -1,7 +1,11 @@
 import {
-    AztecAddress,
+  AztecAddress,
   Contract,
   ContractDeployer,
+  ExtendedNote,
+  Fr,
+  Note,
+  computeMessageSecretHash,
   createPXEClient,
   getContractDeploymentInfo,
   waitForSandbox,
@@ -11,18 +15,8 @@ import TokenContractArtifact from "./Token.json" assert { type: "json" };
 
 const { PXE_URL = "http://localhost:8080" } = process.env;
 
-
-async function showPublicBalances(pxe, token) {
-    // docs:start:showPublicBalances
-    const accounts = await pxe.getRegisteredAccounts();
-  
-    for (const account of accounts) {
-      // highlight-next-line:showPublicBalances
-      const balance = await token.methods.balance_of_public(account.address).view();
-      console.log(`Balance of ${account.address}: ${balance}`);
-    }
-    // docs:end:showPublicBalances
-  }
+//delay by t milliseconds
+const delay = (t) => new Promise((resolve) => setTimeout(resolve, t));
 
 async function main() {
   const pxe = createPXEClient(PXE_URL);
@@ -30,41 +24,74 @@ async function main() {
   console.log(`Connected to chain ${chainId}`);
 
   const wallets = await getSandboxAccountsWallets(pxe);
-  const ownerWallet = await wallets[0];
-  const ownerAddress = await ownerWallet.getCompleteAddress();
+  const ownerWallet = wallets[0];
+  const ownerAddress = ownerWallet.getAddress();
 
   const contractAddress =
-    "0x08de844c2d0d4fe8d076d1d7fcb358268617c3fd683a0568f7caae73a3fae979";
+    "0x14ddb8840adacad1c0adf248a564ba51d1ee61e3a3d16ecbca8cf786fc945b29";
+
   const token = await Contract.at(
     AztecAddress.fromString(contractAddress),
     TokenContractArtifact,
     ownerWallet
   );
 
-  const balance = await token.methods
+  const oldBalance = await token.methods
     .balance_of_private(ownerWallet.getAddress())
     .view();
-  console.log(`Account balance is ${balance}`);
 
+  // Create a secret and a corresponding hash that will be used to mint funds privately
+  const secret = Fr.random();
+  const secretHash = computeMessageSecretHash(secret);
 
-  // docs:start:mintPublicFunds
-  const [owner] = await getSandboxAccountsWallets(pxe);
-
-  const tx = token.methods.mint_private(ownerWallet.getAddress(), 100n).send();
-  console.log(`Sent mint transaction ${await tx.getTxHash()}`);
-//   await showPublicBalances(pxe, token);
-
+  const tx = token.methods.mint_private(100n, secretHash).send();
+  console.log(`\nSent private mint transaction ${await tx.getTxHash()}`);
+  
+  delay(1000);
   console.log(`Awaiting transaction to be mined`);
   const receipt = await tx.wait();
   console.log(`Transaction has been mined on block ${receipt.blockNumber}`);
-//   await showPublicBalances(pxe, token);
-  // docs:end:mintPublicFunds
+  
+  delay(1000);
+  console.log(`Adding the newly created "pending shield" note to PXE`);
 
-  // docs:start:showLogs
-  const blockNumber = await pxe.getBlockNumber();
-  const logs = (await pxe.getUnencryptedLogs(blockNumber, 1)).logs;
-  const textLogs = logs.map(extendedLog => extendedLog.log.data.toString('ascii'));
-  for (const log of textLogs) console.log(`Log emitted: ${log}`);
+  // Add the newly created "pending shield" note to PXE
+  const pendingShieldsStorageSlot = new Fr(5); // The storage slot of `pending_shields` is 5.
+  const note = new Note([new Fr(100n), secretHash]);
+  await pxe.addNote(
+    new ExtendedNote(
+      note,
+      ownerAddress,
+      token.address,
+      pendingShieldsStorageSlot,
+      receipt.txHash
+    )
+  );
+
+  console.log(`\nAdded note to PXE with secret ${secret}\n`);
+
+  // Make the tokens spendable by redeeming them using the secret (converts the "pending shield note" created above
+  // to a "token note")
+  const shieldTx = token.methods
+    .redeem_shield(ownerAddress, 100n, secret)
+    .send();
+  console.log(`Sent private redeem transaction ${await shieldTx.getTxHash()}`);
+  delay(1000);
+  console.log(`Awaiting transaction to be mined`);
+  const shieldReceipt = await shieldTx.wait();
+  console.log(
+    `Transaction has been mined on block ${shieldReceipt.blockNumber}`
+  );
+  console.log(
+    `${100n} tokens were successfully minted and redeemed by ${ownerAddress}`
+  );
+
+  const newBalance = await token.methods
+    .balance_of_private(ownerWallet.getAddress())
+    .view();
+
+  console.log(`\n\nOld Private balance: ${oldBalance}`);
+  console.log(`New Private balance: ${newBalance}`);
 }
 
 main().catch((err) => {

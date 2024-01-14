@@ -16,7 +16,7 @@
     "clean": "rm -rf ./src/artifacts ./target",
     "codegen": "${AZTEC_CLI:-aztec-cli} codegen target --outdir src/artifacts --ts",
     "compile": "${AZTEC_NARGO:-aztec-nargo} compile",
-    "start": "NODE_NO_WARNINGS=1 node --experimental-vm-modules test.js"
+    "bridge": "NODE_NO_WARNINGS=1 node --experimental-vm-modules bridge.js"
   },
   "packageManager": "yarn@4.0.2"
 }
