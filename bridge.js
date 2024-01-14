@@ -36,7 +36,6 @@ const bridgeContractAddress = "0xD7a71796213AB860e5f261D4e2eC62767a6A4Dd4"; // R
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t));
 
 async function main() {
-
   // Fetch private key from environment variable
   const privateKey = process.env.PVT;
   if (!privateKey) {
@@ -65,7 +64,7 @@ async function main() {
     console.log("Usage: node bridgeCli.js [toAddress] [amount]");
     process.exit(1);
   }
-  const toAddress = process.argv[2]
+  const toAddress = process.argv[2];
   const rawAmount = parseInt(process.argv[3]);
   const amount = ethers.parseUnits(process.argv[3], 18);
 
