@@ -35,6 +35,19 @@ const bridgeContractAddress = "0xD7a71796213AB860e5f261D4e2eC62767a6A4Dd4"; // R
 
 const delay = (t) => new Promise((resolve) => setTimeout(resolve, t));
 
+async function showPrivateBalances(pxe, token) {
+  // docs:start:showPrivateBalances
+  const accounts = await pxe.getRegisteredAccounts();
+
+  for (const account of accounts) {
+    // highlight-next-line:showPrivateBalances
+    const balance = await token.methods
+      .balance_of_private(account.address)
+      .view();
+    console.log(`Balance of ${account.address}: ${balance}`);
+  }
+}
+
 async function main() {
   // Fetch private key from environment variable
   const privateKey = process.env.PVT;
@@ -91,7 +104,7 @@ async function main() {
   const ownerAddress = ownerWallet.getAddress();
 
   const contractAddress =
-    "0x14ddb8840adacad1c0adf248a564ba51d1ee61e3a3d16ecbca8cf786fc945b29";
+    "0x222c020e5b53b6ddb8038fdef34995feff163e9e7046aeb9bf81ef37976ca90c";
 
   const token = await Contract.at(
     AztecAddress.fromString(contractAddress),
@@ -155,6 +168,23 @@ async function main() {
 
   console.log(`\n\nOld Private balance: ${oldBalance}`);
   console.log(`New Private balance: ${newBalance}`);
+  
+  await delay(1000);
+  const [owner, recipient] = await getSandboxAccountsWallets(pxe);
+
+  console.log(`\n\nTransferring 1 token from ${owner.getAddress()} to ${recipient.getAddress()}`);
+
+  const tx1 = token.methods
+    .transfer(ownerAddress, recipient.getAddress(), 1n, 0)
+    .send();
+  console.log(`\nSent transfer transaction ${await tx1.getTxHash()}`);
+  await showPrivateBalances(pxe, token);
+
+  console.log(`Awaiting transaction to be mined`);
+  const receip = await tx.wait();
+  await delay(5000)
+  console.log(`Transaction has been mined on block ${receip.blockNumber}`);
+  await showPrivateBalances(pxe, token);
 }
 
 main().catch((error) => {
